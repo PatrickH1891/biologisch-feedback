@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Biologisch Feedback</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="min-h-screen bg-green-50 p-4 md:p-8">
+  <div class="mx-auto max-w-3xl">
+    <div class="rounded-3xl border-0 bg-white shadow-sm p-6 text-center">
+      <img src="https://i.imgur.com/mBuIESU.png" alt="Biologisch by Broich" class="h-16 mx-auto mb-3" />
+      <h1 class="text-3xl font-bold text-slate-900">Biologisch Feedback</h1>
+      <p id="kwText" class="mt-1 text-slate-600"></p>
+    </div>
+
+    <form id="feedbackForm" class="space-y-6 mt-6">
+      <input
+        id="kitaName"
+        type="text"
+        placeholder="Kita Name"
+        class="w-full rounded-xl border bg-white p-3"
+      />
+
+      <div id="ratingsContainer" class="space-y-3"></div>
+
+      <div class="space-y-3">
+        <label class="block font-medium text-slate-700">Foto hinzufügen</label>
+        <div class="flex flex-wrap gap-3">
+          <label class="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg cursor-pointer hover:bg-gray-200">
+            📁 Datei auswählen
+            <input id="fileInput" type="file" accept="image/*" class="hidden" />
+          </label>
+
+          <label class="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg cursor-pointer hover:bg-green-600">
+            📸 Foto machen
+            <input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden" />
+          </label>
+        </div>
+
+        <img id="previewImage" alt="Vorschau" class="mt-3 rounded-xl max-h-40 hidden" />
+      </div>
+
+      <div class="space-y-2">
+        <label class="block font-medium text-slate-700">Kommentar (optional)</label>
+        <textarea
+          id="comment"
+          placeholder="Wie war das Essen heute? Besonderheiten, Feedback..."
+          class="w-full rounded-xl border bg-white p-3 min-h-28"
+        ></textarea>
+      </div>
+
+      <button type="submit" id="submitBtn" class="rounded-xl bg-slate-900 px-5 py-3 text-white hover:bg-slate-800">
+        Absenden
+      </button>
+
+      <p id="error" class="text-red-500 hidden"></p>
+      <p id="success" class="text-green-600 hidden">Gespeichert!</p>
+    </form>
+
+    <div class="mt-10 text-center">
+      <div class="p-6 bg-white rounded-3xl shadow-sm">
+        <h2 class="text-xl font-semibold mb-2">QR-Code für Kitas</h2>
+        <p class="text-slate-600 mb-4">Scannen & direkt Feedback abgeben</p>
+        <img id="qrImage" alt="QR Code" class="mx-auto mb-4" />
+        <p id="currentUrl" class="text-sm text-gray-500 break-all"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = "https://prqrgcstfboexfehpmnt.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBycXJnY3N0ZmJvZXhmZWhwbW50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MjQyODIsImV4cCI6MjA5MjAwMDI4Mn0.cnK1AzYvH6jtvhLAnb8QWhz29j-6Y-d6wC6SgDOpQvg";
+    const STORAGE_BUCKET = "feedback-images";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const initialRatings = {
+      Montag: "",
+      Dienstag: "",
+      Mittwoch: "",
+      Donnerstag: "",
+      Freitag: "",
+    };
+
+    let ratings = { ...initialRatings };
+    let imageFile = null;
+
+    const ratingsContainer = document.getElementById("ratingsContainer");
+    const previewImage = document.getElementById("previewImage");
+    const fileInput = document.getElementById("fileInput");
+    const cameraInput = document.getElementById("cameraInput");
+    const errorEl = document.getElementById("error");
+    const successEl = document.getElementById("success");
+    const form = document.getElementById("feedbackForm");
+    const submitBtn = document.getElementById("submitBtn");
+
+    function getCurrentKW() {
+      const date = new Date();
+      const firstJan = new Date(date.getFullYear(), 0, 1);
+      const days = Math.floor((date - firstJan) / (24 * 60 * 60 * 1000));
+      return Math.ceil((days + firstJan.getDay() + 1) / 7);
+    }
+
+    const currentKW = getCurrentKW();
+    document.getElementById("kwText").textContent = `KW ${currentKW}`;
+    document.getElementById("currentUrl").textContent = window.location.href;
+    document.getElementById("qrImage").src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(window.location.href)}`;
+
+    function renderRatings() {
+      ratingsContainer.innerHTML = "";
+      Object.entries(ratings).forEach(([day, value]) => {
+        const row = document.createElement("div");
+        row.className = "flex items-center justify-between rounded-xl bg-white p-3 shadow-sm";
+        row.innerHTML = `
+          <span class="font-medium text-gray-700">${day}</span>
+          <div class="flex gap-2">
+            <button type="button" data-day="${day}" data-value="up" class="px-3 py-2 rounded-lg border transition-all text-lg ${value === "up" ? "bg-green-500 text-white border-green-500 scale-105" : "bg-gray-100 hover:bg-green-100"}">👍</button>
+            <button type="button" data-day="${day}" data-value="down" class="px-3 py-2 rounded-lg border transition-all text-lg ${value === "down" ? "bg-red-500 text-white border-red-500 scale-105" : "bg-gray-100 hover:bg-red-100"}">👎</button>
+          </div>
+        `;
+        ratingsContainer.appendChild(row);
+      });
+
+      ratingsContainer.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          ratings[btn.dataset.day] = btn.dataset.value;
+          renderRatings();
+        });
+      });
+    }
+
+    function showError(message) {
+      errorEl.textContent = message;
+      errorEl.classList.remove("hidden");
+      successEl.classList.add("hidden");
+    }
+
+    function showSuccess() {
+      successEl.classList.remove("hidden");
+      errorEl.classList.add("hidden");
+    }
+
+    function resetForm() {
+      form.reset();
+      ratings = { ...initialRatings };
+      imageFile = null;
+      previewImage.src = "";
+      previewImage.classList.add("hidden");
+      renderRatings();
+    }
+
+    function handleImage(file) {
+      imageFile = file || null;
+      if (imageFile) {
+        previewImage.src = URL.createObjectURL(imageFile);
+        previewImage.classList.remove("hidden");
+      }
+    }
+
+    fileInput.addEventListener("change", (e) => handleImage(e.target.files?.[0]));
+    cameraInput.addEventListener("change", (e) => handleImage(e.target.files?.[0]));
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      errorEl.classList.add("hidden");
+      successEl.classList.add("hidden");
+
+      const kitaName = document.getElementById("kitaName").value.trim();
+      const comment = document.getElementById("comment").value.trim();
+
+      if (!kitaName) return showError("Bitte den Namen der Kita eintragen.");
+      if (!Object.values(ratings).some((v) => v !== "")) return showError("Bitte mindestens einen Wochentag bewerten.");
+      if (!imageFile) return showError("Bitte ein Foto hochladen.");
+
+      try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Wird gesendet...";
+
+        const safeName = kitaName.replace(/\s+/g, "-");
+        const fileExt = imageFile.name.split(".").pop() || "jpg";
+        const fileName = `${Date.now()}-${safeName}.${fileExt}`;
+        const filePath = `kw-${currentKW}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(filePath, imageFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(filePath);
+
+        const { error: dbError } = await supabase.from("feedback_entries").insert({
+          kita_name: kitaName,
+          ratings,
+          comment,
+          photo_url: data.publicUrl,
+          kw: currentKW,
+        });
+
+        if (dbError) throw dbError;
+
+        showSuccess();
+        resetForm();
+      } catch (err) {
+        showError(err.message || "Fehler beim Speichern");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Absenden";
+      }
+    });
+
+    renderRatings();
+  </script>
+</body>
+</html>
