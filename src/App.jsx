@@ -24,7 +24,8 @@ function getISOWeek(date = new Date()) {
 export default function App() {
   const [kitaName, setKitaName] = useState("");
   const [ratings, setRatings] = useState({});
-  const [comment, setComment] = useState("");
+  const [dayComments, setDayComments] = useState({});
+  const [generalComment, setGeneralComment] = useState("");
   const [sending, setSending] = useState(false);
 
   const setDayRating = (day, value) => {
@@ -32,6 +33,24 @@ export default function App() {
       ...prev,
       [day]: value,
     }));
+  };
+
+  const setDayComment = (day, value) => {
+    setDayComments((prev) => ({
+      ...prev,
+      [day]: value,
+    }));
+  };
+
+  const buildComment = () => {
+    const dayText = DAYS
+      .map((day) => `${day}: ${dayComments[day]?.trim() || ""}`)
+      .join(" ");
+
+    return `${generalComment.trim()}
+
+Tageskommentare:
+${dayText}`.trim();
   };
 
   const submitFeedback = async () => {
@@ -50,7 +69,7 @@ export default function App() {
     const { error } = await supabase.from("feedback_entries").insert({
       kita_name: kitaName.trim(),
       ratings,
-      comment,
+      comment: buildComment(),
       photo_url: "",
       kw: getISOWeek(),
     });
@@ -65,7 +84,8 @@ export default function App() {
     alert("Feedback gespeichert. Danke!");
 
     setRatings({});
-    setComment("");
+    setDayComments({});
+    setGeneralComment("");
   };
 
   return (
@@ -76,7 +96,7 @@ export default function App() {
         </h1>
 
         <p className="mt-2 text-slate-500">
-          Bitte bewertet die Gerichte der Woche.
+          Bitte bewertet die Gerichte der Woche. Kommentare pro Tag sind optional.
         </p>
 
         <label className="mt-6 block text-sm font-medium text-slate-700">
@@ -89,48 +109,54 @@ export default function App() {
           />
         </label>
 
-        <div className="mt-6 space-y-3">
+        <div className="mt-6 space-y-4">
           {DAYS.map((day) => (
-            <div
-              key={day}
-              className="flex items-center justify-between rounded-2xl bg-emerald-50 p-4"
-            >
-              <div className="font-semibold text-slate-900">{day}</div>
+            <div key={day} className="rounded-2xl bg-emerald-50 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="font-semibold text-slate-900">{day}</div>
 
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDayRating(day, "up")}
-                  className={`rounded-xl px-4 py-2 text-2xl ${
-                    ratings[day] === "up"
-                      ? "bg-emerald-500"
-                      : "bg-white"
-                  }`}
-                >
-                  👍
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDayRating(day, "up")}
+                    className={`rounded-xl px-4 py-2 text-2xl transition ${
+                      ratings[day] === "up"
+                        ? "bg-emerald-500 scale-110"
+                        : "bg-white"
+                    }`}
+                  >
+                    👍
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setDayRating(day, "down")}
-                  className={`rounded-xl px-4 py-2 text-2xl ${
-                    ratings[day] === "down"
-                      ? "bg-red-400"
-                      : "bg-white"
-                  }`}
-                >
-                  👎
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setDayRating(day, "down")}
+                    className={`rounded-xl px-4 py-2 text-2xl transition ${
+                      ratings[day] === "down"
+                        ? "bg-red-400 scale-110"
+                        : "bg-white"
+                    }`}
+                  >
+                    👎
+                  </button>
+                </div>
               </div>
+
+              <textarea
+                value={dayComments[day] || ""}
+                onChange={(e) => setDayComment(day, e.target.value)}
+                placeholder={`Kommentar zu ${day} optional...`}
+                className="mt-3 h-20 w-full rounded-xl border border-emerald-200 bg-white p-3 text-sm outline-none focus:border-emerald-400"
+              />
             </div>
           ))}
         </div>
 
         <textarea
-          placeholder="Optionaler Kommentar..."
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          className="mt-6 h-32 w-full rounded-xl border border-emerald-200 p-3 outline-none focus:border-emerald-400"
+          placeholder="Allgemeiner Kommentar zur Woche optional..."
+          value={generalComment}
+          onChange={(e) => setGeneralComment(e.target.value)}
+          className="mt-6 h-28 w-full rounded-xl border border-emerald-200 p-3 outline-none focus:border-emerald-400"
         />
 
         <button
