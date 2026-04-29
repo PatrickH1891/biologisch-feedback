@@ -22,7 +22,7 @@ function getISOWeek(date = new Date()) {
 }
 
 export default function App() {
-  const [kitaName, setKitaName] = useState("");
+  const [kitaName] = useState("Kantine H 18");
   const [ratings, setRatings] = useState({});
   const [dayComments, setDayComments] = useState({});
   const [generalComment, setGeneralComment] = useState("");
